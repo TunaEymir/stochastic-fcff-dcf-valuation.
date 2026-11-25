@@ -1,31 +1,47 @@
 import yfinance as yf
-import pandas as pd
 
 
-def nakit_akisi_getir(hisse_kodu: str) -> pd.DataFrame:
-    # 1. Verilen hisse kodu (örneğin "AAPL") için bir borsa nesnesi oluşturur
-    hisse = yf.Ticker(hisse_kodu)
+def get_cash_flow(ticker_symbol):
+    # Create a Ticker object for the given stock symbol
+    company = yf.Ticker(ticker_symbol)
 
-    # 2. Yıllık nakit akışı tablosunu pandas DataFrame olarak çeker
-    nakit_tablosu = hisse.cashflow
+    # Fetch the annual cash flow statement (returns a pandas DataFrame)
+    cash_flow_df = company.cashflow
 
-    # 3. Tablo boşsa uyarı verip boş bir tablo döndürür
-    if nakit_tablosu is None or nakit_tablosu.empty:
-        print(f"{hisse_kodu} için nakit akışı tablosu bulunamadı.")
-        return pd.DataFrame()
+    # Get the reporting currency automatically (USD for AAPL, EUR for SAP.DE)
+    currency = company.info.get("financialCurrency", "Unknown")
 
-    # 4. Bulunan tabloyu geri döndürür
-    return nakit_tablosu
+    return cash_flow_df, currency
 
 
-if __name__ == "__main__":
-    # Dosyayı doğrudan çalıştırdığımızda AAPL verisini çekip satır isimlerini yazdırır
-    df = nakit_akisi_getir("AAPL")
+# --- FETCH DATA FOR BOTH APPLE AND SAP ---
+tickers = ["AAPL", "SAP.DE"]  # List of target companies
+cash_flow_tables = {}         # Dictionary to store each company's DataFrame
 
-    if not df.empty:
-        print("Nakit akışı tablosundaki satır isimleri:")
-        for satir_adi in df.index:
-            print("-", satir_adi)
+for symbol in tickers:
+    # Unpack the DataFrame and currency returned by the function
+    cf_df, currency = get_cash_flow(symbol)
+    
+    # Save the table in our dictionary for later use (e.g., cash_flow_tables["AAPL"])
+    cash_flow_tables[symbol] = cf_df
+
+    print(f"\n==================== {symbol} ({currency}) ====================")
+    
+    # Print the full cash flow table
+    print(cf_df)
+
+    # Get the newest fiscal year date (first 10 characters: YYYY-MM-DD)
+    latest_date = str(cf_df.columns[0])[:10]
+
+    # Extract the 3 most important rows for DCF from the newest column (.iloc[0])
+    operating_cf = cf_df.loc["Operating Cash Flow"].iloc[0]
+    capex = cf_df.loc["Capital Expenditure"].iloc[0]
+    fcf = cf_df.loc["Free Cash Flow"].iloc[0]
+
+    print(f"\n--- Key DCF Metrics ({latest_date}) ---")
+    print(f"Operating Cash Flow : {operating_cf:,.0f} {currency}")
+    print(f"Capital Expenditure : {capex:,.0f} {currency}")
+    print(f"Free Cash Flow (FCF): {fcf:,.0f} {currency}")
 
 def calculate_dcf(last_fcf, growth_rate, wacc, terminal_growth_rate, cash, total_debt, shares_outstanding, years=5):
     # WACC must be greater than the terminal growth rate for the formula to hold
